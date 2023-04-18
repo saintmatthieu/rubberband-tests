@@ -11,7 +11,8 @@ public:
   WavFileReader(const std::filesystem::path &path);
   int getNumSamplesPerChannelAvailable() const;
   int getSampleRate() const;
-  void read(float *, int);
+  int getNumChannels() const;
+  void read(float *const *, int samplesPerChannel);
 
 private:
   const std::unique_ptr<juce::AudioFormatReader> _juceReader;

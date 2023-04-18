@@ -8,10 +8,12 @@
 namespace saint {
 class WavFileWriter {
 public:
-  WavFileWriter(const std::filesystem::path &path);
-  bool write(const float *, int samplesPerChannel);
+  WavFileWriter(const std::filesystem::path &path, int numChannels,
+                int sampleRate);
+  bool write(const float *const *, int samplesPerChannel);
 
 private:
   const std::unique_ptr<juce::AudioFormatWriter> _juceWriter;
+  const int _numChannels;
 };
 } // namespace saint

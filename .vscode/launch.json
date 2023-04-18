@@ -1,0 +1,14 @@
+{
+  "configurations": [
+    {
+      "name": "(msvc) Launch",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${command:cmake.launchTargetPath}",
+      "args": ["C:\\Users\\saint\\Downloads\\Hipness_808_fonky3_89.wav"],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    }
+  ]
+}

@@ -26,11 +26,14 @@ int WavFileReader::getSampleRate() const {
   return static_cast<int>(_juceReader->sampleRate);
 }
 
-void WavFileReader::read(float *audio, int size) {
-  std::vector<float *> channels(1);
-  channels[0] = audio;
-  _juceReader->read(channels.data(), 1,
-                    static_cast<juce::int64>(_numReadSamples), size);
-  _numReadSamples += size;
+int WavFileReader::getNumChannels() const {
+  return static_cast<int>(_juceReader->numChannels);
+}
+
+void WavFileReader::read(float *const *audio, int samplesPerChannel) {
+  _juceReader->read(audio, _juceReader->numChannels,
+                    static_cast<juce::int64>(_numReadSamples),
+                    samplesPerChannel);
+  _numReadSamples += samplesPerChannel;
 }
 } // namespace saint
