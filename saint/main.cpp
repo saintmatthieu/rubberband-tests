@@ -1,6 +1,8 @@
+#include "AudioContainer.h"
 #include "WavFileReader.h"
 #include "WavFileWriter.h"
 #include "rubberband/RubberBandStretcher.h"
+
 
 #include <cassert>
 #include <filesystem>
@@ -8,33 +10,7 @@
 
 namespace fs = std::filesystem;
 using namespace RubberBand;
-
-class AudioContainer {
-public:
-  AudioContainer(int numSamplesPerChannel, int numChannels)
-      : _numChannels(numChannels) {
-    for (auto i = 0; i < numChannels; ++i) {
-      std::vector<float> owner(numSamplesPerChannel);
-      _input.push_back(owner.data());
-      _inputOwner.emplace_back(std::move(owner));
-    }
-  }
-
-  float *const *get() { return _input.data(); }
-
-  float *const *getWithOffset(int offset) {
-    auto withOffset = _input.data();
-    for (auto i = 0u; i < _numChannels; ++i) {
-      withOffset[i] += offset;
-    }
-    return withOffset;
-  }
-
-private:
-  std::vector<std::vector<float>> _inputOwner;
-  std::vector<float *> _input;
-  const int _numChannels;
-};
+using namespace saint;
 
 int main(int argc, const char *const *argv) {
   if (argc < 2) {
@@ -42,6 +18,7 @@ int main(int argc, const char *const *argv) {
     return 1;
   }
   const fs::path inputPath{std::string{argv[1]}};
+
   const fs::path outputPath = inputPath.parent_path().append("output.wav");
   saint::WavFileReader wavReader{inputPath};
   const auto numChannels = wavReader.getNumChannels();
@@ -49,7 +26,8 @@ int main(int argc, const char *const *argv) {
                                  wavReader.getSampleRate()};
   RubberBandStretcher stretcher{static_cast<size_t>(wavReader.getSampleRate()),
                                 static_cast<size_t>(numChannels),
-                                RubberBandStretcher::OptionProcessRealTime,
+                                RubberBandStretcher::OptionProcessRealTime |
+                                    RubberBandStretcher::OptionChannelsTogether,
                                 2.0};
 
   auto finalCall = false;
@@ -90,5 +68,13 @@ int main(int argc, const char *const *argv) {
     wavWriter.write(writeContainer.getWithOffset(numSamplesToTrim),
                     numSamplesToWrite - numSamplesToTrim);
   }
-  assert(stretcher.available() == 0); // Just to make sure ...
+  // Squeeze out the final few samples
+  while (stretcher.available() > 0) {
+    const auto numSamplesToWrite = static_cast<size_t>(stretcher.available());
+    AudioContainer writeContainer(stretcher.available(), numChannels);
+    const auto retrieved =
+        stretcher.retrieve(writeContainer.get(), numSamplesToWrite);
+    assert(retrieved == numSamplesToWrite);
+    wavWriter.write(writeContainer.get(), numSamplesToWrite);
+  }
 }

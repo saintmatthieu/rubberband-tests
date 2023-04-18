@@ -1,6 +1,7 @@
 add_library(wavfile
   WavFileReader.cpp
   WavFileWriter.cpp
+  AudioContainer.cpp
 )
 
 target_link_libraries(wavfile PUBLIC 
