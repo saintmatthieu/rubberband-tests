@@ -1,0 +1,2 @@
+add_subdirectory(rubberband)
+add_subdirectory(rubberband-cmake)
