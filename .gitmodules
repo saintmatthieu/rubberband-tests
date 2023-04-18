@@ -1,0 +1,6 @@
+[submodule "rubberband-cmake"]
+	path = rubberband-cmake
+	url = https://github.com/saintmatthieu/rubberband-cmake.git
+[submodule "rubberband"]
+	path = rubberband
+	url = https://github.com/breakfastquay/rubberband.git
