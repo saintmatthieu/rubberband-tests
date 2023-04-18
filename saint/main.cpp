@@ -1,4 +1,6 @@
 #include "rubberband/RubberBandStretcher.h"
+#include "WavFileReader.h"
+#include "WavFileWriter.h"
 
 #include <iostream>
 
