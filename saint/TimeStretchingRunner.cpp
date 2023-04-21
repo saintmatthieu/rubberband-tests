@@ -4,6 +4,7 @@
 #include "WavFileWriter.h"
 
 #include <cassert>
+#include <memory>
 #include <optional>
 
 namespace saint {
@@ -14,7 +15,8 @@ namespace fs = std::filesystem;
 namespace {
 RubberBandStretcher::Option
 mergeOptions(const std::vector<RubberBandStretcher::Option> &options) {
-  auto merged = 0;
+  auto merged =
+      static_cast<int>(RubberBandStretcher::Option::OptionProcessRealTime);
   for (const auto option : options) {
     merged |= option;
   }
@@ -63,36 +65,26 @@ std::optional<std::string> asString(RubberBandStretcher::Option option) {
 }
 
 std::string
-getFileSuffix(const std::vector<RubberBandStretcher::Option> &options) {
-  std::string fileSuffix;
+getOptionSuffix(const std::vector<RubberBandStretcher::Option> &options) {
+  std::string optionSuffix;
   std::for_each(options.begin(), options.end(),
                 [&](RubberBandStretcher::Option option) {
                   if (const auto nonDefaultString = asString(option)) {
-                    fileSuffix += "-"s + *nonDefaultString;
+                    optionSuffix += "-"s + *nonDefaultString;
                   }
                 });
-  return fileSuffix;
+  return optionSuffix;
 }
-
 } // namespace
 
-void TimeStretchingRunner::process(
-    const fs::path &inputPath,
-    const std::vector<RubberBandStretcher::Option> &options) {
+void process(const fs::path &inputPath, const fs::path &outputPath,
+             RubberBandStretcher::Option options) {
 
-  const auto fileSuffix = getFileSuffix(options);
-  const fs::path outputPath =
-      inputPath.parent_path() /
-      inputPath.stem().concat("-out").concat(fileSuffix).concat(".wav");
-  const auto mergedOptions = mergeOptions(options);
   WavFileReader wavReader{inputPath};
   const auto numChannels = wavReader.getNumChannels();
   WavFileWriter wavWriter{outputPath, numChannels, wavReader.getSampleRate()};
   RubberBandStretcher stretcher{static_cast<size_t>(wavReader.getSampleRate()),
-                                static_cast<size_t>(numChannels),
-                                RubberBandStretcher::OptionProcessRealTime |
-                                    RubberBandStretcher::OptionChannelsTogether,
-                                2.0};
+                                static_cast<size_t>(numChannels), options, 2.0};
 
   auto finalCall = false;
 
@@ -143,6 +135,65 @@ void TimeStretchingRunner::process(
     assert(retrieved == numSamplesToWrite);
     wavWriter.write(writeContainer.get(), static_cast<int>(numSamplesToWrite));
   }
+}
+
+namespace {
+void writeWav(const fs::path &path, int sampleRate, float *const *audio,
+              int numSamples, int numChannels) {
+  WavFileWriter leftWriter{path, numChannels, sampleRate};
+  leftWriter.write(audio, numSamples);
+}
+} // namespace
+
+void TimeStretchingRunner::process(
+    const std::filesystem::path &inputPath,
+    const std::vector<RubberBand::RubberBandStretcher::Option> &options) {
+
+  WavFileReader reader{inputPath};
+  assert(reader.getNumChannels() == 2);
+  if (reader.getNumChannels() != 2) {
+    std::cerr << "Not interested in mono input" << std::endl;
+    return;
+  }
+  const auto sampleRate = reader.getSampleRate();
+  const auto numSamples = reader.getNumSamplesPerChannelAvailable();
+  AudioContainer inContainer{numSamples, 2};
+  reader.read(inContainer.get(), numSamples);
+  const auto dir = inputPath.parent_path();
+  const auto tmpLeftInPath = dir / "_tmp_left_in.wav";
+  const auto tmpRightInPath = dir / "_tmp_right_in.wav";
+  const auto tmpLeftOutPath = dir / "_tmp_left_out.wav";
+  const auto tmpRightOutPath = dir / "_tmp_right_out.wav";
+  writeWav(tmpLeftInPath, sampleRate, inContainer.get(), numSamples, 1);
+  writeWav(tmpRightInPath, sampleRate, &inContainer.get()[1], numSamples, 1);
+
+  const auto optionSuffix = getOptionSuffix(options);
+  const auto mergedOptions = mergeOptions(options);
+  const auto outputPathHead =
+      inputPath.parent_path() /
+      inputPath.stem().concat("-out").concat(optionSuffix);
+  const auto outputPathStereo = fs::path{outputPathHead}.concat("-st.wav");
+  const auto outputPathDualMono = fs::path{outputPathHead}.concat("-dm.wav");
+
+  saint::process(inputPath, outputPathStereo, mergedOptions);
+  saint::process(tmpLeftInPath, tmpLeftOutPath, mergedOptions);
+  saint::process(tmpRightInPath, tmpRightOutPath, mergedOptions);
+
+  WavFileReader leftOutReader{tmpLeftOutPath};
+  WavFileReader rightOutReader{tmpRightOutPath};
+  const auto numLeftSamples = leftOutReader.getNumSamplesPerChannelAvailable();
+  const auto numRightSamples =
+      rightOutReader.getNumSamplesPerChannelAvailable();
+  //  This assert sometimes fails => the same number of input samples doesn't
+  //  yield the same number of output samples, even for files with as similar
+  //  contents as the left-right channels of a stereo file.
+  // assert(numLeftSamples == numRightSamples);
+  const auto outNumSamples = std::max(numLeftSamples, numRightSamples);
+  AudioContainer outContainer{outNumSamples, 2};
+  leftOutReader.read(outContainer.get(), outNumSamples);
+  rightOutReader.read(&outContainer.get()[1], outNumSamples);
+  writeWav(outputPathDualMono, sampleRate, outContainer.get(), outNumSamples,
+           2);
 }
 
 } // namespace saint
