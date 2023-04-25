@@ -78,13 +78,16 @@ getOptionSuffix(const std::vector<RubberBandStretcher::Option> &options) {
 } // namespace
 
 void process(const fs::path &inputPath, const fs::path &outputPath,
-             RubberBandStretcher::Option options) {
+             RubberBandStretcher::Option options,
+             const std::pair<int, int> &stretchRatio) {
 
   WavFileReader wavReader{inputPath};
   const auto numChannels = wavReader.getNumChannels();
   WavFileWriter wavWriter{outputPath, numChannels, wavReader.getSampleRate()};
+  const auto r = static_cast<double>(stretchRatio.first) /
+                 static_cast<double>(stretchRatio.second);
   RubberBandStretcher stretcher{static_cast<size_t>(wavReader.getSampleRate()),
-                                static_cast<size_t>(numChannels), options, 2.0};
+                                static_cast<size_t>(numChannels), options, r};
 
   auto finalCall = false;
 
@@ -147,7 +150,8 @@ void writeWav(const fs::path &path, int sampleRate, float *const *audio,
 
 void TimeStretchingRunner::process(
     const std::filesystem::path &inputPath,
-    const std::vector<RubberBand::RubberBandStretcher::Option> &options) {
+    const std::vector<RubberBand::RubberBandStretcher::Option> &options,
+    const std::pair<int, int> &stretchRatio) {
 
   WavFileReader reader{inputPath};
   assert(reader.getNumChannels() == 2);
@@ -169,15 +173,17 @@ void TimeStretchingRunner::process(
 
   const auto optionSuffix = getOptionSuffix(options);
   const auto mergedOptions = mergeOptions(options);
+  const auto stretchRatioStr = "-r"s + std::to_string(stretchRatio.first) +
+                               "." + std::to_string(stretchRatio.second);
   const auto outputPathHead =
       inputPath.parent_path() /
-      inputPath.stem().concat("-out").concat(optionSuffix);
-  const auto outputPathStereo = fs::path{outputPathHead}.concat("-st.wav");
-  const auto outputPathDualMono = fs::path{outputPathHead}.concat("-dm.wav");
+      inputPath.stem().concat(stretchRatioStr).concat(optionSuffix);
+  const auto outputPathStereo = fs::path{outputPathHead}.concat("-st-RB.wav");
+  const auto outputPathDualMono = fs::path{outputPathHead}.concat("-dm-RB.wav");
 
-  saint::process(inputPath, outputPathStereo, mergedOptions);
-  saint::process(tmpLeftInPath, tmpLeftOutPath, mergedOptions);
-  saint::process(tmpRightInPath, tmpRightOutPath, mergedOptions);
+  saint::process(inputPath, outputPathStereo, mergedOptions, stretchRatio);
+  saint::process(tmpLeftInPath, tmpLeftOutPath, mergedOptions, stretchRatio);
+  saint::process(tmpRightInPath, tmpRightOutPath, mergedOptions, stretchRatio);
 
   WavFileReader leftOutReader{tmpLeftOutPath};
   WavFileReader rightOutReader{tmpRightOutPath};
